@@ -20,7 +20,7 @@ def main():
         return
 
     adapter = DualSenseHidAdapter()
-    print("Move the left stick and squeeze the triggers. Ctrl+C to stop.\n")
+    print("Move the left stick and squeeze the triggers. Ctrl+C to stop.\n", flush=True)
     try:
         while True:
             frame = adapter.read()
@@ -28,6 +28,7 @@ def main():
                 f"steering={frame.steering:+.2f}  throttle={frame.throttle:.2f}  "
                 f"brake={frame.brake:.2f}",
                 end="\r",
+                flush=True,
             )
             time.sleep(0.05)
     except KeyboardInterrupt:
