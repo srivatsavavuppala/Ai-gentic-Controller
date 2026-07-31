@@ -11,6 +11,7 @@ Manager + Evaluation Agent comparing variants against this baseline).
 """
 
 import argparse
+import time
 from pathlib import Path
 
 from stable_baselines3 import PPO
@@ -26,12 +27,13 @@ class LapProgressCallback(BaseCallback):
     """Prints mean episode reward and lap-completion rate periodically, so a
     training run's progress is visible without digging into SB3's logger."""
 
-    def __init__(self, print_every: int = 10_000):
+    def __init__(self, print_every: int = 5_000):
         super().__init__()
         self.print_every = print_every
         self._last_print = 0
         self._completed_laps = 0
         self._finished_episodes = 0
+        self._start_time = time.time()
 
     def _on_step(self) -> bool:
         for info in self.locals.get("infos", []):
@@ -44,9 +46,15 @@ class LapProgressCallback(BaseCallback):
         if self.num_timesteps - self._last_print >= self.print_every:
             self._last_print = self.num_timesteps
             rate = self._completed_laps / max(1, self._finished_episodes)
+            elapsed = time.time() - self._start_time
+            steps_per_sec = self.num_timesteps / elapsed
+            remaining = (self.locals["total_timesteps"] - self.num_timesteps) / steps_per_sec
             print(
-                f"[{self.num_timesteps} steps] episodes={self._finished_episodes} "
-                f"laps_completed={self._completed_laps} lap_completion_rate={rate:.2%}"
+                f"[{self.num_timesteps}/{self.locals['total_timesteps']} steps, "
+                f"{steps_per_sec:.0f} steps/sec, ~{remaining/60:.1f} min remaining] "
+                f"episodes={self._finished_episodes} laps_completed={self._completed_laps} "
+                f"lap_completion_rate={rate:.2%}",
+                flush=True,
             )
         return True
 
