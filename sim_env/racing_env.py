@@ -53,6 +53,12 @@ class RacingEnv(gym.Env):
         self._progress = 0.0
         self._total_distance = 0.0
 
+    @property
+    def state(self) -> CarState:
+        """Read-only access to the car's current position/heading/speed --
+        used by sim_env/render.py to plot a lap; not needed by training."""
+        return self._state
+
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         start = self.track.centerline[0]
