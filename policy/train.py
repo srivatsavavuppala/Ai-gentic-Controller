@@ -52,6 +52,15 @@ class LapProgressCallback(BaseCallback):
         self._finished_episodes = 0
         self._recent_outcomes = deque(maxlen=window)
         self._start_time = time.time()
+        self._start_num_timesteps = 0
+
+    def _on_training_start(self) -> None:
+        # On a resumed run, self.num_timesteps starts from the loaded
+        # checkpoint's count, not 0 -- steps/sec must be measured against
+        # steps taken THIS session, not the cumulative total, or the rate
+        # comes out wildly inflated (all prior steps / this session's tiny
+        # elapsed time).
+        self._start_num_timesteps = self.num_timesteps
 
     def _on_step(self) -> bool:
         for info, done in zip(self.locals.get("infos", []), self.locals.get("dones", [])):
@@ -68,7 +77,8 @@ class LapProgressCallback(BaseCallback):
                 sum(self._recent_outcomes) / len(self._recent_outcomes) if self._recent_outcomes else 0.0
             )
             elapsed = time.time() - self._start_time
-            steps_per_sec = self.num_timesteps / elapsed
+            new_steps_this_session = self.num_timesteps - self._start_num_timesteps
+            steps_per_sec = new_steps_this_session / elapsed
             remaining = (self.locals["total_timesteps"] - self.num_timesteps) / steps_per_sec
             print(
                 f"[{self.num_timesteps}/{self.locals['total_timesteps']} steps, "
