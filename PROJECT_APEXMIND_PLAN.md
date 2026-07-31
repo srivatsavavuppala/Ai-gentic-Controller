@@ -96,6 +96,14 @@ traffic, safety car, low grip, old tires).
 **Phase 7 — Race Strategy Agent**
 Pit timing, tire/fuel/ERS strategy, opponent modeling — relevant once the target game models tire wear/fuel.
 
+> **Confirmed future requirement (2026-07-31):** the current car model and RL action space are
+> deliberately steering/throttle/brake only (no gears, clutch, tires, fuel, or ERS/DRS) — that's the
+> right scope for Phase 2/3, but the user has explicitly asked that full vehicle control (manual
+> gears/clutch, tire wear, fuel management, ERS/DRS) be supported eventually, not left out of the
+> long-term plan. This expands `sim_env/car_model.py`'s dynamics model and the Driving Policy's action
+> space, and is squarely Phase 6/7 work — flag it when scoping those phases rather than treating the
+> Phase 2 car model as the final one.
+
 **Phase 8 — Continuous loop + reporting**
 Automate "Observe → Analyze → Hypothesize → Experiment → Train → Evaluate → Update Knowledge → Deploy
 → Repeat," scheduled runs, auto-generated research reports (key findings / successful & failed
