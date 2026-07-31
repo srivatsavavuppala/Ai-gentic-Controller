@@ -47,3 +47,14 @@ python -c "from control.input_adapter import list_devices; print(list_devices())
 
 The second command is the plug-and-play smoke test -- plug in any
 controller/wheel and it should show up by name.
+
+### DualSense (PS5) note
+
+On this dev setup, SDL2's bundled HIDAPI driver detects the DualSense by
+name but its analog polling stops updating after the first read. Rather
+than depend on that, PS5 pads go through `control/dualsense_hid.py`, which
+talks to the device directly via raw HID and was verified against real
+hardware. Run `python -m control.live_monitor` to watch live steering/
+throttle/brake values yourself (self-paced, no chat back-and-forth needed
+to time it). Xbox pads and generic wheels still go through the SDL2 path
+in `control/input_adapter.py`, which isn't known to have this issue.
