@@ -13,8 +13,11 @@
  * Wire protocol (little-endian), matches trackmania/bridge_client.py:
  *   Telemetry frame  (plugin -> Python), sent every tick, 32 bytes:
  *     float posX, posY, posZ, velX, velY, velZ, speed; int32 raceTimeMs
- *   Control frame (Python -> plugin), read if available, 8 bytes:
- *     int32 steer, int32 gas   (each in [-65536, 65536])
+ *   Control frame (Python -> plugin), read if available, 12 bytes:
+ *     int32 steer, int32 gas, int32 reset
+ *     (steer/gas each in [-65536, 65536]; reset != 0 triggers Respawn()
+ *     instead of applying steer/gas that tick -- lets Python auto-reset
+ *     after a crash without a human pressing backspace)
  */
 
 Net::Socket@ g_listener;
@@ -52,19 +55,35 @@ void OnRunStep(SimulationManager@ simManager) {
     float speed = simManager.PlayerInfo.DisplaySpeed;
     int raceTime = simManager.PlayerInfo.RaceTime;
 
-    g_client.WriteFloat(pos.x);
-    g_client.WriteFloat(pos.y);
-    g_client.WriteFloat(pos.z);
-    g_client.WriteFloat(vel.x);
-    g_client.WriteFloat(vel.y);
-    g_client.WriteFloat(vel.z);
-    g_client.WriteFloat(speed);
-    g_client.WriteInt32(raceTime);
+    // Net::Socket doesn't notify us when the remote end closes -- Write()
+    // just starts returning false. Treat that as a disconnect and drop back
+    // to listening for a new client, or every future tick fails silently
+    // and no new Python process can ever connect again.
+    bool ok = true;
+    ok = ok && g_client.Write(pos.x);
+    ok = ok && g_client.Write(pos.y);
+    ok = ok && g_client.Write(pos.z);
+    ok = ok && g_client.Write(vel.x);
+    ok = ok && g_client.Write(vel.y);
+    ok = ok && g_client.Write(vel.z);
+    ok = ok && g_client.Write(speed);
+    ok = ok && g_client.Write(raceTime);
 
-    if (g_client.Available >= 8) {
+    if (!ok) {
+        log("ApexMind Bridge: client disconnected, waiting for a new connection");
+        @g_client = null;
+        return;
+    }
+
+    if (g_client.Available >= 12) {
         int steer = g_client.ReadInt32();
         int gas = g_client.ReadInt32();
-        simManager.SetInputState(InputType::Steer, steer);
-        simManager.SetInputState(InputType::Gas, gas);
+        int reset = g_client.ReadInt32();
+        if (reset != 0) {
+            simManager.Respawn();
+        } else {
+            simManager.SetInputState(InputType::Steer, steer);
+            simManager.SetInputState(InputType::Gas, gas);
+        }
     }
 }

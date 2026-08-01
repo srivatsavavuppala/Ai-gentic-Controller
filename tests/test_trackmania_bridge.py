@@ -42,6 +42,6 @@ def test_control_frame_gas_combines_throttle_and_brake():
     assert gas_value == -65536
 
 
-def test_control_wire_format_packs_two_int32s():
-    packed = struct.pack(_CONTROL_FORMAT, 32768, -16384)
-    assert struct.unpack(_CONTROL_FORMAT, packed) == (32768, -16384)
+def test_control_wire_format_packs_three_int32s():
+    packed = struct.pack(_CONTROL_FORMAT, 32768, -16384, 0)
+    assert struct.unpack(_CONTROL_FORMAT, packed) == (32768, -16384, 0)

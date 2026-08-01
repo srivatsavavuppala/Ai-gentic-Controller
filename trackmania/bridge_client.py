@@ -8,8 +8,10 @@ TMInterface's own (now-removed) Python API worked.
 Wire protocol (little-endian), must match ApexMindBridge.as exactly:
     Telemetry frame (plugin -> us), every tick, 32 bytes:
         float posX, posY, posZ, velX, velY, velZ, speed; int32 raceTimeMs
-    Control frame (us -> plugin), 8 bytes:
-        int32 steer, int32 gas   (each in [-65536, 65536])
+    Control frame (us -> plugin), 12 bytes:
+        int32 steer, int32 gas, int32 reset
+        (steer/gas each in [-65536, 65536]; reset != 0 triggers an
+        in-game Respawn() instead of applying steer/gas that tick)
 """
 
 import socket
@@ -20,7 +22,7 @@ from control.schema import ControlFrame
 
 _TELEMETRY_FORMAT = "<7fi"
 _TELEMETRY_SIZE = struct.calcsize(_TELEMETRY_FORMAT)
-_CONTROL_FORMAT = "<2i"
+_CONTROL_FORMAT = "<3i"
 _STEER_GAS_RANGE = 65536
 
 
@@ -52,7 +54,12 @@ class TrackmaniaBridge:
         game's native [-65536, 65536] integer range."""
         steer = self._to_native_range(frame.steering)
         gas = self._to_native_range(frame.throttle - frame.brake)
-        self._sock.sendall(struct.pack(_CONTROL_FORMAT, steer, gas))
+        self._sock.sendall(struct.pack(_CONTROL_FORMAT, steer, gas, 0))
+
+    def send_reset(self) -> None:
+        """Triggers an in-game Respawn() -- lets a training/driving loop
+        recover from a crash without a human pressing backspace."""
+        self._sock.sendall(struct.pack(_CONTROL_FORMAT, 0, 0, 1))
 
     @staticmethod
     def _to_native_range(value: float) -> int:
