@@ -21,9 +21,9 @@ DRIVE_FRAME = ControlFrame(steering=0.0, throttle=1.0, brake=0.0)
 
 
 def main():
-    print("Connecting to ApexMindBridge.as on 127.0.0.1:9000 ...")
+    print("Connecting to ApexMindBridge.as on 127.0.0.1:9000 ...", flush=True)
     bridge = TrackmaniaBridge()
-    print("Connected. Driving full-throttle, straight, forever -- Ctrl+C to stop.\n")
+    print("Connected. Driving full-throttle, straight, forever -- Ctrl+C to stop.\n", flush=True)
 
     attempt = 1
     best_time_ms = 0
@@ -42,7 +42,8 @@ def main():
                 if time.time() - stall_since > STALL_DURATION_S:
                     print(
                         f"attempt {attempt}: stalled/crashed at race_time={state.race_time_ms}ms "
-                        f"(best so far: {best_time_ms}ms) -- resetting"
+                        f"(best so far: {best_time_ms}ms) -- resetting",
+                        flush=True,
                     )
                     bridge.send_reset()
                     attempt += 1
@@ -51,7 +52,7 @@ def main():
             else:
                 stall_since = None
     except KeyboardInterrupt:
-        print(f"\nStopped after {attempt} attempts. Best race_time reached: {best_time_ms}ms")
+        print(f"\nStopped after {attempt} attempts. Best race_time reached: {best_time_ms}ms", flush=True)
     finally:
         bridge.close()
 
