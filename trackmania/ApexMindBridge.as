@@ -80,6 +80,13 @@ void OnRunStep(SimulationManager@ simManager) {
         int gas = g_client.ReadInt32();
         int reset = g_client.ReadInt32();
         if (reset != 0) {
+            // Respawn() resets position but NOT whatever steer/gas was last
+            // applied -- without this, the car can start the new episode
+            // still receiving stale input from the moment it crashed
+            // (plausibly reverse, if that's what the policy happened to be
+            // outputting right before the stall).
+            simManager.SetInputState(InputType::Steer, 0);
+            simManager.SetInputState(InputType::Gas, 0);
             simManager.Respawn();
         } else {
             simManager.SetInputState(InputType::Steer, steer);
