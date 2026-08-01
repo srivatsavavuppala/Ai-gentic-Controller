@@ -42,11 +42,43 @@ class TrackmaniaBridge:
     def __init__(self, host: str = "127.0.0.1", port: int = 9000, timeout: float = 10.0):
         self._sock = socket.create_connection((host, port), timeout=timeout)
         self._sock.settimeout(None)
+        self._recv_buffer = b""
 
     def read_state(self) -> TrackmaniaState:
-        buf = self._recv_exact(_TELEMETRY_SIZE)
+        buf = self._recv_latest_frame()
         values = struct.unpack(_TELEMETRY_FORMAT, buf)
         return TrackmaniaState(*values)
+
+    def _recv_latest_frame(self) -> bytes:
+        """Returns the MOST RECENT telemetry frame, draining any backlog --
+        same lesson learned from the DualSense controller earlier in this
+        project: reading one frame at a time without draining falls further
+        behind real time on every call once Python's loop is faster than
+        the game's tick rate, or any backlog accumulates. A plain recv loop
+        would silently train on stale, lagged state."""
+        while len(self._recv_buffer) < _TELEMETRY_SIZE:
+            chunk = self._sock.recv(4096)
+            if not chunk:
+                raise ConnectionError("TrackMania bridge socket closed unexpectedly")
+            self._recv_buffer += chunk
+
+        self._sock.setblocking(False)
+        try:
+            while True:
+                chunk = self._sock.recv(4096)
+                if not chunk:
+                    break
+                self._recv_buffer += chunk
+        except BlockingIOError:
+            pass
+        finally:
+            self._sock.setblocking(True)
+
+        num_complete = len(self._recv_buffer) // _TELEMETRY_SIZE
+        latest_start = (num_complete - 1) * _TELEMETRY_SIZE
+        frame = self._recv_buffer[latest_start : latest_start + _TELEMETRY_SIZE]
+        self._recv_buffer = self._recv_buffer[num_complete * _TELEMETRY_SIZE :]
+        return frame
 
     def send_control(self, frame: ControlFrame) -> None:
         """Maps our shared ControlFrame onto TrackMania's single combined
@@ -69,15 +101,6 @@ class TrackmaniaBridge:
     def _to_native_range(value: float) -> int:
         clipped = max(-1.0, min(1.0, value))
         return int(clipped * _STEER_GAS_RANGE)
-
-    def _recv_exact(self, n: int) -> bytes:
-        buf = b""
-        while len(buf) < n:
-            chunk = self._sock.recv(n - len(buf))
-            if not chunk:
-                raise ConnectionError("TrackMania bridge socket closed unexpectedly")
-            buf += chunk
-        return buf
 
     def close(self) -> None:
         self._sock.close()

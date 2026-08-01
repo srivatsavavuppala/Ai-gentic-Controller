@@ -12,3 +12,4 @@ dist/
 experiments/runs/
 knowledge/vectors/
 policy/checkpoints/
+trackmania/checkpoints/
