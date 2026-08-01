@@ -31,12 +31,24 @@ See the docstrings in `ApexMindBridge.as` and `bridge_client.py` -- both
 must be kept in sync if the wire format ever changes. Telemetry flows
 plugin -> Python every physics tick; control flows Python -> plugin
 whenever a `ControlFrame` is sent, mapped onto TrackMania's single combined
-gas axis (`throttle - brake`) and its steer axis.
+gas axis (`throttle - brake`, sign-flipped -- see below) and its steer axis.
+A `reset` field triggers an in-game `Respawn()` for unattended retry loops.
 
-## Open questions (verify live, once actually driving)
+## Confirmed live (2026-08-01)
+
+- Continuous telemetry streaming works (~100Hz, physically sane deltas).
+- Control input reaches the car.
+- **`InputType::Gas` is inverted from the usual racing-game convention:
+  positive value is reverse, not forward.** `send_control` negates
+  `throttle - brake` to correct for this -- confirmed by isolated testing
+  (`gas_direction_test.py`) after the auto-respawn heuristic driver was
+  seen going backward instead of forward.
+
+## Open questions (verify live)
 
 - Sign convention for `steering`/`Steer`: assumed positive = right, matching
-  our own `ControlFrame` convention -- flip if it turns out reversed.
+  our own `ControlFrame` convention -- not yet isolated/confirmed the way
+  gas was; flip if it turns out reversed.
 - `Net::Socket.Accept(0)` is assumed non-blocking (returns null immediately
   if no client is pending) -- if `OnRunStep` instead stalls waiting for a
   connection, this needs revisiting.

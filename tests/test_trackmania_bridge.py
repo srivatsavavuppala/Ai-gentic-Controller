@@ -30,16 +30,41 @@ def test_steering_out_of_range_is_clipped():
     assert TrackmaniaBridge._to_native_range(-2.5) == -65536
 
 
-def test_control_frame_gas_combines_throttle_and_brake():
-    # Full throttle, no brake -> gas should map to full positive range.
-    frame = ControlFrame(steering=0.0, throttle=1.0, brake=0.0)
-    gas_value = TrackmaniaBridge._to_native_range(frame.throttle - frame.brake)
-    assert gas_value == 65536
+class _FakeSocket:
+    def __init__(self):
+        self.sent = b""
 
-    # Full brake, no throttle -> full negative range.
-    frame = ControlFrame(steering=0.0, throttle=0.0, brake=1.0)
-    gas_value = TrackmaniaBridge._to_native_range(frame.throttle - frame.brake)
-    assert gas_value == -65536
+    def sendall(self, data):
+        self.sent += data
+
+
+def _bridge_with_fake_socket():
+    bridge = object.__new__(TrackmaniaBridge)
+    bridge._sock = _FakeSocket()
+    return bridge
+
+
+def test_full_throttle_sends_negative_gas():
+    # Confirmed live (2026-08-01): positive InputType::Gas is reverse, so
+    # full throttle must send a NEGATIVE gas value, not positive.
+    bridge = _bridge_with_fake_socket()
+    bridge.send_control(ControlFrame(steering=0.0, throttle=1.0, brake=0.0))
+    _steer, gas, _reset = struct.unpack(_CONTROL_FORMAT, bridge._sock.sent)
+    assert gas == -65536
+
+
+def test_full_brake_sends_positive_gas():
+    bridge = _bridge_with_fake_socket()
+    bridge.send_control(ControlFrame(steering=0.0, throttle=0.0, brake=1.0))
+    _steer, gas, _reset = struct.unpack(_CONTROL_FORMAT, bridge._sock.sent)
+    assert gas == 65536
+
+
+def test_send_reset_sets_reset_flag():
+    bridge = _bridge_with_fake_socket()
+    bridge.send_reset()
+    steer, gas, reset = struct.unpack(_CONTROL_FORMAT, bridge._sock.sent)
+    assert (steer, gas, reset) == (0, 0, 1)
 
 
 def test_control_wire_format_packs_three_int32s():

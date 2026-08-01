@@ -51,9 +51,13 @@ class TrackmaniaBridge:
     def send_control(self, frame: ControlFrame) -> None:
         """Maps our shared ControlFrame onto TrackMania's single combined
         gas axis (throttle - brake) and its steer axis, each scaled to the
-        game's native [-65536, 65536] integer range."""
+        game's native [-65536, 65536] integer range.
+
+        Confirmed live (2026-08-01): positive InputType::Gas is REVERSE, not
+        forward -- opposite of the usual racing-game convention we assumed.
+        Hence the negation below."""
         steer = self._to_native_range(frame.steering)
-        gas = self._to_native_range(frame.throttle - frame.brake)
+        gas = self._to_native_range(-(frame.throttle - frame.brake))
         self._sock.sendall(struct.pack(_CONTROL_FORMAT, steer, gas, 0))
 
     def send_reset(self) -> None:
