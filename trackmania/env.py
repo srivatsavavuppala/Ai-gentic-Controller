@@ -25,6 +25,19 @@ STALL_SPEED_THRESHOLD = 5.0  # km/h
 STALL_DURATION_STEPS = 200  # ~2s at ~100Hz
 RESPAWN_SETTLE_STEPS = 30  # drain stale telemetry after a reset before resuming
 
+# A first live training run (2026-08-01) confirmed a real reward flaw: pure
+# distance-moved reward with no time cost let the policy earn MORE total
+# episode reward by crawling just above the stall threshold for a long time
+# than by driving fast and eventually crashing (mean_reward fell from ~94
+# to ~59 over 20 episodes while best_race_time froze, then never recovered
+# with more training -- a converged degenerate strategy, not noise). The
+# per-step time penalty below makes "survive slowly" net-negative while
+# leaving genuine fast driving net-positive.
+TIME_PENALTY_PER_MS = 0.01
+MAX_DT_MS = 50  # cap so our own processing lag (e.g. a slow PPO gradient
+# update between rollouts) doesn't get misattributed to the policy as an
+# unfairly large time penalty for a gap it didn't cause
+
 
 class TrackmaniaEnv(gym.Env):
     metadata: ClassVar[dict] = {"render_modes": []}
@@ -45,6 +58,7 @@ class TrackmaniaEnv(gym.Env):
         self._steps = 0
         self._stall_steps = 0
         self._prev_pos = None
+        self._prev_race_time_ms = None
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -55,6 +69,7 @@ class TrackmaniaEnv(gym.Env):
         self._steps = 0
         self._stall_steps = 0
         self._prev_pos = np.array([state.pos_x, state.pos_y, state.pos_z])
+        self._prev_race_time_ms = state.race_time_ms
         return self._observe(state), {}
 
     def step(self, action):
@@ -64,8 +79,12 @@ class TrackmaniaEnv(gym.Env):
         self._steps += 1
 
         pos = np.array([state.pos_x, state.pos_y, state.pos_z])
-        reward = float(np.linalg.norm(pos - self._prev_pos))
+        distance_moved = float(np.linalg.norm(pos - self._prev_pos))
         self._prev_pos = pos
+
+        dt_ms = max(0, min(state.race_time_ms - self._prev_race_time_ms, MAX_DT_MS))
+        self._prev_race_time_ms = state.race_time_ms
+        reward = distance_moved - TIME_PENALTY_PER_MS * dt_ms
 
         if state.speed < STALL_SPEED_THRESHOLD and state.race_time_ms > 500:
             self._stall_steps += 1

@@ -1,7 +1,14 @@
 import numpy as np
+import pytest
 
 from trackmania.bridge_client import TrackmaniaState
-from trackmania.env import RESPAWN_SETTLE_STEPS, STALL_DURATION_STEPS, TrackmaniaEnv
+from trackmania.env import (
+    MAX_DT_MS,
+    RESPAWN_SETTLE_STEPS,
+    STALL_DURATION_STEPS,
+    TIME_PENALTY_PER_MS,
+    TrackmaniaEnv,
+)
 
 
 class _FakeBridge:
@@ -73,6 +80,38 @@ def test_stall_for_enough_steps_terminates_episode():
             break
 
     assert terminated
+
+
+def test_barely_moving_over_time_yields_negative_reward():
+    # The reward flaw that actually happened live: near-zero movement over
+    # real elapsed time must be net-negative, or "survive slowly" beats
+    # "drive fast, eventually crash" -- exactly what a first training run
+    # converged to (mean_reward fell from ~94 to ~59 over 20 episodes while
+    # best_race_time froze).
+    settle = [_state(race_time_ms=1000)] * RESPAWN_SETTLE_STEPS
+    barely_moved = _state(pos=(0.001, 0.0, 0.0), speed=6.0, race_time_ms=1020)
+    bridge = _FakeBridge([*settle, barely_moved])
+    env = TrackmaniaEnv(bridge=bridge)
+    env.reset()
+
+    _obs, reward, _terminated, _truncated, _info = env.step(np.array([0.0, 1.0, 0.0]))
+
+    assert reward < 0
+
+
+def test_dt_is_capped_so_processing_lag_isnt_blamed_on_the_policy():
+    # A huge gap in race_time_ms (e.g. real time lost to a slow PPO
+    # gradient-update pause between rollouts, not bad driving) must not
+    # produce a correspondingly huge penalty.
+    settle = [_state(race_time_ms=1000)] * RESPAWN_SETTLE_STEPS
+    huge_gap = _state(pos=(0.0, 0.0, 0.0), speed=0.0, race_time_ms=50_000)
+    bridge = _FakeBridge([*settle, huge_gap])
+    env = TrackmaniaEnv(bridge=bridge)
+    env.reset()
+
+    _obs, reward, _terminated, _truncated, _info = env.step(np.array([0.0, 0.0, 0.0]))
+
+    assert reward == pytest.approx(-TIME_PENALTY_PER_MS * MAX_DT_MS)
 
 
 def test_truncates_at_max_steps_if_never_stalled():
